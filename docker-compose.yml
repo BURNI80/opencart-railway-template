@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  opencart:
+    build: .
+    container_name: opencart
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8080:80"
+    volumes:
+      - opencart_storage:/var/www/html/system/storage
+    environment:
+      - MYSQLHOST=mysql
+      - MYSQLPORT=3306
+      - MYSQLUSER=root
+      - MYSQLPASSWORD=opencart_password
+      - MYSQLDATABASE=opencart
+      - HTTP_SERVER=http://localhost:8080
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=opencart
+      - ADMIN_EMAIL=admin@example.com
+    networks:
+      - opencart-net
+
+  mysql:
+    image: mariadb:10.6
+    container_name: opencart-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=opencart
+      - MYSQL_ROOT_PASSWORD=opencart_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - opencart-net
+
+volumes:
+  opencart_storage:
+  mysql_data:
+
+networks:
+  opencart-net:
+    driver: bridge
