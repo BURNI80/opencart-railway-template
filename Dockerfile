@@ -1,18 +1,21 @@
 FROM php:8.1-apache
 
-# Install system deps + MariaDB server
+# Install system deps + MariaDB server + Composer
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev libzip-dev unzip \
     mariadb-server mariadb-client \
     && docker-php-ext-install pdo_mysql bcmath zip gd mysqli mbstring \
     && a2enmod rewrite headers \
+    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html
 
-# Clone OpenCart 4.1.0.4
+# Clone OpenCart 4.1.0.4 and install dependencies
 RUN git clone --depth 1 --branch 4.1.0.4 https://github.com/opencart/opencart.git /tmp/opencart \
     && cp -r /tmp/opencart/upload/* /var/www/html/ \
+    && cp /tmp/opencart/composer.json /tmp/opencart/composer.lock /var/www/html/ \
+    && cd /var/www/html && composer install --no-dev --prefer-dist --no-interaction \
     && rm -rf /tmp/opencart \
     && touch /var/www/html/config.php /var/www/html/admin/config.php \
     && chown -R www-data:www-data /var/www/html
