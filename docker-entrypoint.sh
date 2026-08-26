@@ -171,7 +171,7 @@ CONF
 install_opencart() {
     log "Running custom installer..."
 
-    php /var/www/html/install/custom_install.php \
+    php /usr/local/bin/opencart_install.php \
         --username    "$ADMIN_USER" \
         --email       "$ADMIN_EMAIL" \
         --password    "$ADMIN_PASS" \
@@ -184,9 +184,6 @@ install_opencart() {
         --db_database "$DB_NAME" \
         --db_prefix   "$DB_PREFIX" \
         --language    en-gb
-
-    log "Removing install directory..."
-    rm -rf /var/www/html/install
 
     log "OpenCart installed successfully!"
 }

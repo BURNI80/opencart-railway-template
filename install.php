@@ -54,7 +54,7 @@ if ($stmt->fetch()) {
     echo "[SKIP] Tables already exist, generating config only\n";
 } else {
     // Import SQL schema
-    $sqlFile = __DIR__ . '/opencart-en-gb.sql';
+    $sqlFile = '/root/opencart-en-gb.sql';
     if (!file_exists($sqlFile)) {
         die("[FAIL] SQL schema not found: $sqlFile\n");
     }
