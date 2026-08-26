@@ -9,17 +9,17 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 $args = getopt('', [
-    'username::', 'email::', 'password::', 'http_server::',
-    'db_hostname::', 'db_port::', 'db_username::', 'db_password::',
-    'db_database::', 'db_prefix::', 'db_driver::',
-    'language::'
+    'username:', 'email:', 'password:', 'http_server:',
+    'db_hostname:', 'db_port:', 'db_username:', 'db_password:',
+    'db_database:', 'db_prefix:', 'db_driver:',
+    'language:'
 ]);
 
 $username  = $args['username']   ?? 'admin';
 $email     = $args['email']      ?? 'admin@example.com';
 $password  = $args['password']   ?? 'admin';
 $server    = $args['http_server'] ?? 'http://localhost/';
-$db_host   = $args['db_hostname'] ?? 'localhost';
+$db_host   = $args['db_hostname'] ?? '127.0.0.1';
 $db_port   = $args['db_port']     ?? '3306';
 $db_user   = $args['db_username'] ?? 'opencart';
 $db_pass   = $args['db_password'] ?? 'opencart';
@@ -32,7 +32,7 @@ echo "Database: $db_name @ $db_host:$db_port\n";
 echo "Admin: $username ($email)\n";
 echo "HTTP Server: $server\n\n";
 
-// Connect to database
+// Connect to database (use 127.0.0.1 for TCP instead of socket)
 try {
     $pdo = new PDO(
         "mysql:host=$db_host;port=$db_port;charset=utf8mb4",
@@ -40,7 +40,8 @@ try {
         $db_pass,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
         ]
     );
     echo "[OK] Connected to database\n";

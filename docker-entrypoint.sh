@@ -177,7 +177,7 @@ install_opencart() {
         --password    "$ADMIN_PASS" \
         --http_server "$HTTP_SERVER/" \
         --db_driver   mysqli \
-        --db_hostname localhost \
+        --db_hostname 127.0.0.1 \
         --db_port     3306 \
         --db_username "$DB_USER" \
         --db_password "$DB_PASS" \
