@@ -78,11 +78,11 @@ db_has_tables() {
 generate_config() {
     log "Writing config.php files..."
 
-    # Root config.php (catalog)
-    cat > /var/www/html/config.php <<'CATCONF'
+    # Catalog config.php
+    cat > /var/www/html/config.php <<CATCONF
 <?php
 define('APPLICATION', 'Catalog');
-define('HTTP_SERVER', 'HTTP_SERVER_PLACEHOLDER');
+define('HTTP_SERVER', '${HTTP_SERVER}/');
 define('DIR_OPENCART', '/var/www/html/');
 define('DIR_APPLICATION', DIR_OPENCART . 'catalog/');
 define('DIR_SYSTEM', DIR_OPENCART . 'system/');
@@ -99,28 +99,22 @@ define('DIR_SESSION', DIR_STORAGE . 'session/');
 define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
 define('DB_DRIVER', 'mysqli');
 define('DB_HOSTNAME', '127.0.0.1');
-define('DB_USERNAME', 'DB_USERNAME_PLACEHOLDER');
-define('DB_PASSWORD', 'DB_PASSWORD_PLACEHOLDER');
-define('DB_DATABASE', 'DB_DATABASE_PLACEHOLDER');
-define('DB_PREFIX', 'DB_PREFIX_PLACEHOLDER');
+define('DB_USERNAME', '${DB_USER}');
+define('DB_PASSWORD', '${DB_PASS}');
+define('DB_DATABASE', '${DB_NAME}');
+define('DB_PREFIX', '${DB_PREFIX}');
 define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
 define('DB_SSL_CA', '');
 CATCONF
 
-    sed -i "s|HTTP_SERVER_PLACEHOLDER|${HTTP_SERVER}/|g" /var/www/html/config.php
-    sed -i "s|DB_USERNAME_PLACEHOLDER|${DB_USER}|g" /var/www/html/config.php
-    sed -i "s|DB_PASSWORD_PLACEHOLDER|${DB_PASS}|g" /var/www/html/config.php
-    sed -i "s|DB_DATABASE_PLACEHOLDER|${DB_NAME}|g" /var/www/html/config.php
-    sed -i "s|DB_PREFIX_PLACEHOLDER|${DB_PREFIX}|g" /var/www/html/config.php
-
     # Admin config.php
-    cat > /var/www/html/admin/config.php <<'ADMCONF'
+    cat > /var/www/html/admin/config.php <<ADMCONF
 <?php
 define('APPLICATION', 'Admin');
-define('HTTP_SERVER', 'HTTP_SERVER_PLACEHOLDER');
-define('HTTP_CATALOG', 'HTTP_CATALOG_PLACEHOLDER');
+define('HTTP_SERVER', '${HTTP_SERVER}/admin/');
+define('HTTP_CATALOG', '${HTTP_SERVER}/');
 define('DIR_OPENCART', '/var/www/html/');
 define('DIR_APPLICATION', DIR_OPENCART . 'admin/');
 define('DIR_SYSTEM', DIR_OPENCART . 'system/');
@@ -138,10 +132,10 @@ define('DIR_SESSION', DIR_STORAGE . 'session/');
 define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
 define('DB_DRIVER', 'mysqli');
 define('DB_HOSTNAME', '127.0.0.1');
-define('DB_USERNAME', 'DB_USERNAME_PLACEHOLDER');
-define('DB_PASSWORD', 'DB_PASSWORD_PLACEHOLDER');
-define('DB_DATABASE', 'DB_DATABASE_PLACEHOLDER');
-define('DB_PREFIX', 'DB_PREFIX_PLACEHOLDER');
+define('DB_USERNAME', '${DB_USER}');
+define('DB_PASSWORD', '${DB_PASS}');
+define('DB_DATABASE', '${DB_NAME}');
+define('DB_PREFIX', '${DB_PREFIX}');
 define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
@@ -149,33 +143,41 @@ define('DB_SSL_CA', '');
 define('OPENCART_SERVER', 'https://www.opencart.com/');
 ADMCONF
 
-    sed -i "s|HTTP_SERVER_PLACEHOLDER|${HTTP_SERVER}/admin/|g" /var/www/html/admin/config.php
-    sed -i "s|HTTP_CATALOG_PLACEHOLDER|${HTTP_SERVER}/|g" /var/www/html/admin/config.php
-    sed -i "s|DB_USERNAME_PLACEHOLDER|${DB_USER}|g" /var/www/html/admin/config.php
-    sed -i "s|DB_PASSWORD_PLACEHOLDER|${DB_PASS}|g" /var/www/html/admin/config.php
-    sed -i "s|DB_DATABASE_PLACEHOLDER|${DB_NAME}|g" /var/www/html/admin/config.php
-    sed -i "s|DB_PREFIX_PLACEHOLDER|${DB_PREFIX}|g" /var/www/html/admin/config.php
-
     chown www-data:www-data /var/www/html/config.php /var/www/html/admin/config.php
 }
 
 install_opencart() {
-    log "Running custom installer..."
+    log "Importing OpenCart SQL schema..."
 
-    php /usr/local/bin/opencart_install.php \
-        --username    "$ADMIN_USER" \
-        --email       "$ADMIN_EMAIL" \
-        --password    "$ADMIN_PASS" \
-        --http_server "$HTTP_SERVER/" \
-        --db_driver   mysqli \
-        --db_hostname 127.0.0.1 \
-        --db_port     3306 \
-        --db_username "$DB_USER" \
-        --db_password "$DB_PASS" \
-        --db_database "$DB_NAME" \
-        --db_prefix   "$DB_PREFIX" \
-        --language    en-gb
+    # Import schema using mysql CLI (proper multi-statement handling)
+    if [ -f "/root/opencart-en-gb.sql" ]; then
+        mysql -u root "$DB_NAME" < /root/opencart-en-gb.sql 2>&1 | tail -5 || true
+        log "SQL schema imported"
+    else
+        warn "SQL schema not found at /root/opencart-en-gb.sql"
+    fi
 
+    log "Creating admin user..."
+    local admin_hash
+    admin_hash=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);")
+
+    mysql -u root "$DB_NAME" <<-EOSQL
+INSERT IGNORE INTO \`${DB_PREFIX}user\` SET
+    user_group_id = 1,
+    username = '${ADMIN_USER}',
+    password = '${admin_hash}',
+    salt = '',
+    firstname = 'Admin',
+    lastname = 'User',
+    email = '${ADMIN_EMAIL}',
+    code = '',
+    ip = '127.0.0.1',
+    status = 1,
+    date_added = NOW();
+EOSQL
+    log "Admin user created: $ADMIN_USER"
+
+    generate_config
     log "OpenCart installed successfully!"
 }
 
