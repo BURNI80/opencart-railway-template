@@ -1,8 +1,8 @@
 <?php
 /**
- * Custom OpenCart Installer for Railway
- * Replaces cli_install.php which may not be available at runtime.
- * Imports the SQL schema directly and creates the admin user.
+ * OpenCart Installer for Railway (embedded MariaDB)
+ *
+ * Uses oc_db_schema() to create tables, then imports INSERT data.
  */
 
 error_reporting(E_ALL);
@@ -15,9 +15,9 @@ $args = getopt('', [
     'language:'
 ]);
 
-$username  = $args['username']   ?? 'admin';
-$email     = $args['email']      ?? 'admin@example.com';
-$password  = $args['password']   ?? 'admin';
+$username  = $args['username']    ?? 'admin';
+$email     = $args['email']       ?? 'admin@example.com';
+$password  = $args['password']    ?? 'admin';
 $server    = $args['http_server'] ?? 'http://localhost/';
 $db_host   = $args['db_hostname'] ?? '127.0.0.1';
 $db_port   = $args['db_port']     ?? '3306';
@@ -27,122 +27,168 @@ $db_name   = $args['db_database'] ?? 'opencart';
 $db_prefix = $args['db_prefix']   ?? 'oc_';
 $language  = $args['language']     ?? 'en-gb';
 
-echo "=== OpenCart Custom Installer ===\n";
+echo "=== OpenCart Installer (db_schema) ===\n";
 echo "Database: $db_name @ $db_host:$db_port\n";
-echo "Admin: $username ($email)\n";
-echo "HTTP Server: $server\n\n";
+echo "Admin: $username ($email)\n\n";
 
-// Connect to database (use 127.0.0.1 for TCP instead of socket)
+// Load OpenCart DB schema helper (pure function, no dependencies)
+require_once '/var/www/html/system/helper/db_schema.php';
+
+// Connect via PDO
 try {
     $pdo = new PDO(
         "mysql:host=$db_host;port=$db_port;dbname=$db_name;charset=utf8mb4",
         $db_user,
         $db_pass,
         [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
         ]
     );
-    echo "[OK] Connected to database: $db_name\n";
+    echo "[OK] Connected to database\n";
 } catch (PDOException $e) {
-    die("[FAIL] Database connection: " . $e->getMessage() . "\n");
+    die("[FAIL] Connection: " . $e->getMessage() . "\n");
 }
 
 // Check if already installed
 $stmt = $pdo->query("SHOW TABLES LIKE '{$db_prefix}setting'");
 if ($stmt->fetch()) {
-    echo "[SKIP] Tables already exist, generating config only\n";
+    echo "[SKIP] Tables already exist\n";
 } else {
-    // Import SQL schema
+    echo "[INFO] Creating database tables from oc_db_schema()...\n";
+
+    $tables = oc_db_schema();
+    $created = 0;
+
+    foreach ($tables as $table) {
+        $tbl_name = $db_prefix . $table['name'];
+
+        // Drop if exists
+        $pdo->exec("DROP TABLE IF EXISTS `$tbl_name`");
+
+        // Build CREATE TABLE
+        $sql = "CREATE TABLE `$tbl_name` (\n";
+
+        foreach ($table['field'] as $field) {
+            $sql .= "  `" . $field['name'] . "` " . $field['type'];
+            if (!empty($field['not_null'])) {
+                $sql .= " NOT NULL";
+            }
+            if (isset($field['default'])) {
+                $sql .= " DEFAULT '" . addslashes($field['default']) . "'";
+            }
+            if (!empty($field['auto_increment'])) {
+                $sql .= " AUTO_INCREMENT";
+            }
+            $sql .= ",\n";
+        }
+
+        if (isset($table['primary'])) {
+            $cols = array_map(function ($c) { return "`$c`"; }, $table['primary']);
+            $sql .= "  PRIMARY KEY (" . implode(',', $cols) . "),\n";
+        }
+
+        if (isset($table['index'])) {
+            foreach ($table['index'] as $index) {
+                $cols = array_map(function ($c) { return "`$c`"; }, $index['key']);
+                $sql .= "  KEY `" . $index['name'] . "` (" . implode(',', $cols) . "),\n";
+            }
+        }
+
+        $sql = rtrim($sql, ",\n") . "\n";
+        $sql .= ") ENGINE=" . $table['engine']
+              . " CHARSET=" . $table['charset']
+              . " ROW_FORMAT=DYNAMIC COLLATE=" . $table['collate'] . ";\n";
+
+        try {
+            $pdo->exec($sql);
+            $created++;
+        } catch (PDOException $e) {
+            echo "[ERROR] Table $tbl_name: " . $e->getMessage() . "\n";
+        }
+    }
+    echo "[OK] Created $created tables\n";
+
+    // Import INSERT data from SQL file
     $sqlFile = '/root/opencart-en-gb.sql';
     if (!file_exists($sqlFile)) {
-        die("[FAIL] SQL schema not found: $sqlFile\n");
+        die("[FAIL] SQL file not found: $sqlFile\n");
     }
 
-    echo "[INFO] Importing SQL schema...\n";
-    $sql = file_get_contents($sqlFile);
-
-    // Replace table prefix
-    if ($db_prefix !== 'oc_') {
-        $sql = str_replace('oc_', $db_prefix, $sql);
-    }
-
-    // Split by semicolons (naive but works for this schema)
-    $statements = array_filter(array_map('trim', explode(';', $sql)));
-
+    echo "[INFO] Importing INSERT data...\n";
+    $lines = file($sqlFile, FILE_IGNORE_NEW_LINES);
     $imported = 0;
-    foreach ($statements as $statement) {
-        if (empty($statement) || substr($statement, 0, 2) === '--') {
-            continue;
-        }
-        try {
-            $pdo->exec($statement);
-            $imported++;
-        } catch (PDOException $e) {
-            // Skip duplicate key errors and similar
-            if (strpos($e->getMessage(), 'Duplicate') === false &&
-                strpos($e->getMessage(), 'already exists') === false) {
-                echo "[WARN] " . substr($e->getMessage(), 0, 120) . "\n";
+
+    if ($lines) {
+        $sql  = '';
+        $start = false;
+
+        foreach ($lines as $line) {
+            if (substr($line, 0, 12) === 'INSERT INTO ') {
+                $sql   = '';
+                $start = true;
+            }
+            if ($start) {
+                $sql .= $line;
+            }
+            if (substr($line, -2) === ');') {
+                $sql = str_replace("INSERT INTO `oc_", "INSERT INTO `$db_prefix", $sql);
+                try {
+                    $pdo->exec($sql);
+                    $imported++;
+                } catch (PDOException $e) {
+                    echo "[WARN] " . substr($e->getMessage(), 0, 120) . "\n";
+                }
+                $start = false;
             }
         }
     }
-    echo "[OK] Imported $imported SQL statements\n";
+    echo "[OK] Imported $imported INSERT statements\n";
 
-    // Create admin user with proper password hash
-    $encrypted = password_hash($password, PASSWORD_DEFAULT);
-    $date_added = date('Y-m-d H:i:s');
+    // Create admin user
+    $enc = password_hash($password, PASSWORD_DEFAULT);
+    $pdo->exec("SET CHARACTER SET utf8mb4");
+    $pdo->exec("SET @@session.sql_mode = ''");
 
-    try {
-        $pdo->exec("INSERT INTO `{$db_prefix}user` SET
-            user_group_id = 1,
-            username = " . $pdo->quote($username) . ",
-            password = " . $pdo->quote($encrypted) . ",
-            salt = '',
-            firstname = 'Admin',
-            lastname = 'User',
-            email = " . $pdo->quote($email) . ",
-            code = '',
-            ip = '127.0.0.1',
-            status = 1,
-            date_added = " . $pdo->quote($date_added));
-        echo "[OK] Created admin user: $username\n";
-    } catch (PDOException $e) {
-        echo "[WARN] Admin user: " . $e->getMessage() . "\n";
-    }
+    $pdo->exec("DELETE FROM `{$db_prefix}user` WHERE `user_id` = '1'");
+    $stmt = $pdo->prepare("INSERT INTO `{$db_prefix}user` SET
+        `user_id` = '1', `user_group_id` = '1',
+        `username` = ?, `password` = ?,
+        `firstname` = 'Admin', `lastname` = 'User',
+        `email` = ?, `status` = '1', `date_added` = NOW()");
+    $stmt->execute([$username, $enc, $email]);
+    echo "[OK] Created admin user: $username\n";
 
-    // Insert default settings
-    $settings = [
-        ['config_name'  => 'config_email',           'config_value' => $email],
-        ['config_name'  => 'config_name',            'config_value' => 'OpenCart Store'],
-        ['config_name'  => 'config_url',             'config_value' => $server],
-        ['config_name'  => 'config_ssl',             'config_value' => $server],
-        ['config_name'  => 'config_language',        'config_value' => $language],
-        ['config_name'  => 'config_admin',           'config_value' => 'admin'],
-        ['config_name'  => 'config_error_filename',  'config_value' => 'error_not_found'],
-        ['config_name'  => 'config_error_login',     'config_value' => 'error_login'],
-        ['config_name'  => 'config_error_permission', 'config_value' => 'error_permission'],
-    ];
+    // Update settings
+    $pdo->exec("DELETE FROM `{$db_prefix}setting` WHERE `key` = 'config_email'");
+    $stmt = $pdo->prepare("INSERT INTO `{$db_prefix}setting` SET `code` = 'config', `key` = 'config_email', `value` = ?");
+    $stmt->execute([$email]);
 
-    foreach ($settings as $s) {
-        try {
-            $stmt = $pdo->prepare("INSERT IGNORE INTO `{$db_prefix}setting` SET `store_id` = 0, `group` = 'config', `key` = ?, `value` = ?");
-            $stmt->execute([$s['config_name'], $s['config_value']]);
-        } catch (PDOException $e) {
-            // ignore
-        }
-    }
-    echo "[OK] Default settings inserted\n";
+    $pdo->exec("DELETE FROM `{$db_prefix}setting` WHERE `key` = 'config_encryption'");
+    $enc_key = bin2hex(random_bytes(512));
+    $stmt = $pdo->prepare("INSERT INTO `{$db_prefix}setting` SET `code` = 'config', `key` = 'config_encryption', `value` = ?");
+    $stmt->execute([$enc_key]);
+
+    $pdo->exec("INSERT INTO `{$db_prefix}api` SET `username` = 'Default', `key` = '" . bin2hex(random_bytes(128)) . "', `status` = 1, `date_added` = NOW(), `date_modified` = NOW()");
+    $api_id = $pdo->lastInsertId();
+
+    $pdo->exec("DELETE FROM `{$db_prefix}setting` WHERE `key` = 'config_api_id'");
+    $stmt = $pdo->prepare("INSERT INTO `{$db_prefix}setting` SET `code` = 'config', `key` = 'config_api_id', `value` = ?");
+    $stmt->execute([(string)$api_id]);
+
+    $pdo->exec("UPDATE `{$db_prefix}setting` SET `value` = 'INV-" . date('Y') . "-00' WHERE `key` = 'config_invoice_prefix'");
+    echo "[OK] Settings configured\n";
 }
 
-// Generate config.php files
+// Write config.php files
 $dir_opencart = '/var/www/html/';
 $dir_storage  = $dir_opencart . 'system/storage/';
 
 // Catalog config.php
-$catalog_config = "<?php\n// HTTP\n"
-    . "define('HTTP_SERVER', '" . addslashes($server) . "');\n\n"
-    . "// DIR\n"
+$catalog = "<?php\n"
+    . "define('APPLICATION', 'Catalog');\n\n"
+    . "define('HTTP_SERVER', '" . addslashes($server) . "/');\n\n"
     . "define('DIR_OPENCART', '" . $dir_opencart . "');\n"
     . "define('DIR_APPLICATION', DIR_OPENCART . 'catalog/');\n"
     . "define('DIR_SYSTEM', DIR_OPENCART . 'system/');\n"
@@ -157,26 +203,26 @@ $catalog_config = "<?php\n// HTTP\n"
     . "define('DIR_LOGS', DIR_STORAGE . 'logs/');\n"
     . "define('DIR_SESSION', DIR_STORAGE . 'session/');\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
-    . "// DB\n"
     . "define('DB_DRIVER', 'mysqli');\n"
     . "define('DB_HOSTNAME', '127.0.0.1');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"
     . "define('DB_PREFIX', '" . addslashes($db_prefix) . "');\n"
-    . "define('DB_PORT', '$db_port');\n"
+    . "define('DB_PORT', '" . addslashes($db_port) . "');\n"
     . "define('DB_SSL_KEY', '');\n"
     . "define('DB_SSL_CERT', '');\n"
-    . "define('DB_SSL_CA', '');\n";
+    . "define('DB_SSL_CA', '');\n\n"
+    . "define('CACHE_ENGINE', 'file');\n";
 
-file_put_contents('/var/www/html/config.php', $catalog_config);
+file_put_contents('/var/www/html/config.php', $catalog);
 echo "[OK] Wrote config.php (catalog)\n";
 
 // Admin config.php
-$admin_config = "<?php\n// HTTP\n"
-    . "define('HTTP_SERVER', '" . addslashes($server) . "admin/');\n"
-    . "define('HTTP_CATALOG', '" . addslashes($server) . "');\n\n"
-    . "// DIR\n"
+$admin = "<?php\n"
+    . "define('APPLICATION', 'Admin');\n\n"
+    . "define('HTTP_SERVER', '" . addslashes($server) . "/admin/');\n"
+    . "define('HTTP_CATALOG', '" . addslashes($server) . "/');\n\n"
     . "define('DIR_OPENCART', '" . $dir_opencart . "');\n"
     . "define('DIR_APPLICATION', DIR_OPENCART . 'admin/');\n"
     . "define('DIR_SYSTEM', DIR_OPENCART . 'system/');\n"
@@ -192,21 +238,20 @@ $admin_config = "<?php\n// HTTP\n"
     . "define('DIR_LOGS', DIR_STORAGE . 'logs/');\n"
     . "define('DIR_SESSION', DIR_STORAGE . 'session/');\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
-    . "// DB\n"
     . "define('DB_DRIVER', 'mysqli');\n"
     . "define('DB_HOSTNAME', '127.0.0.1');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"
     . "define('DB_PREFIX', '" . addslashes($db_prefix) . "');\n"
-    . "define('DB_PORT', '$db_port');\n"
+    . "define('DB_PORT', '" . addslashes($db_port) . "');\n"
     . "define('DB_SSL_KEY', '');\n"
     . "define('DB_SSL_CERT', '');\n"
     . "define('DB_SSL_CA', '');\n\n"
-    . "// OpenCart API\n"
+    . "define('CACHE_ENGINE', 'file');\n\n"
     . "define('OPENCART_SERVER', 'https://www.opencart.com/');\n";
 
-file_put_contents('/var/www/html/admin/config.php', $admin_config);
+file_put_contents('/var/www/html/admin/config.php', $admin);
 echo "[OK] Wrote admin/config.php\n";
 
 echo "\n=== Installation Complete ===\n";
