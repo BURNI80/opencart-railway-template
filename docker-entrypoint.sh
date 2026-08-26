@@ -169,9 +169,9 @@ CONF
 }
 
 install_opencart() {
-    log "Running OpenCart CLI installer..."
+    log "Running custom installer..."
 
-    php /var/www/html/install/cli_install.php install \
+    php /var/www/html/install/custom_install.php \
         --username    "$ADMIN_USER" \
         --email       "$ADMIN_EMAIL" \
         --password    "$ADMIN_PASS" \
@@ -182,7 +182,8 @@ install_opencart() {
         --db_username "$DB_USER" \
         --db_password "$DB_PASS" \
         --db_database "$DB_NAME" \
-        --db_prefix   "$DB_PREFIX"
+        --db_prefix   "$DB_PREFIX" \
+        --language    en-gb
 
     log "Removing install directory..."
     rm -rf /var/www/html/install
