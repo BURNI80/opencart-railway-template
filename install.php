@@ -35,7 +35,7 @@ echo "HTTP Server: $server\n\n";
 // Connect to database (use 127.0.0.1 for TCP instead of socket)
 try {
     $pdo = new PDO(
-        "mysql:host=$db_host;port=$db_port;charset=utf8mb4",
+        "mysql:host=$db_host;port=$db_port;dbname=$db_name;charset=utf8mb4",
         $db_user,
         $db_pass,
         [
@@ -44,7 +44,7 @@ try {
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
         ]
     );
-    echo "[OK] Connected to database\n";
+    echo "[OK] Connected to database: $db_name\n";
 } catch (PDOException $e) {
     die("[FAIL] Database connection: " . $e->getMessage() . "\n");
 }
@@ -159,7 +159,7 @@ $catalog_config = "<?php\n// HTTP\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
     . "// DB\n"
     . "define('DB_DRIVER', 'mysqli');\n"
-    . "define('DB_HOSTNAME', 'localhost');\n"
+    . "define('DB_HOSTNAME', '127.0.0.1');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"
@@ -194,7 +194,7 @@ $admin_config = "<?php\n// HTTP\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
     . "// DB\n"
     . "define('DB_DRIVER', 'mysqli');\n"
-    . "define('DB_HOSTNAME', 'localhost');\n"
+    . "define('DB_HOSTNAME', '127.0.0.1');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"

@@ -30,15 +30,12 @@ fi
 start_mariadb() {
     log "Starting embedded MariaDB..."
 
-    # Initialize data dir if needed
     if [ ! -d "/var/lib/mysql/mysql" ]; then
         mysql_install_db --user=mysql --datadir=/var/lib/mysql >/dev/null 2>&1
     fi
 
-    # Start MariaDB in background
     mysqld_safe --datadir=/var/lib/mysql &
 
-    # Wait for it
     local retries=30
     while [ $retries -gt 0 ]; do
         if mysqladmin ping -u root --silent 2>/dev/null; then
@@ -56,11 +53,14 @@ start_mariadb() {
 setup_database() {
     log "Setting up database..."
 
-    # Create database and user
     mysql -u root <<-EOSQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
 FLUSH PRIVILEGES;
 EOSQL
 }
@@ -79,15 +79,10 @@ generate_config() {
     log "Writing config.php files..."
 
     # Root config.php (catalog)
-    cat > /var/www/html/config.php <<CONF
+    cat > /var/www/html/config.php <<'CATCONF'
 <?php
-// APPLICATION
 define('APPLICATION', 'Catalog');
-
-// HTTP
-define('HTTP_SERVER', '${HTTP_SERVER}/');
-
-// DIR
+define('HTTP_SERVER', 'HTTP_SERVER_PLACEHOLDER');
 define('DIR_OPENCART', '/var/www/html/');
 define('DIR_APPLICATION', DIR_OPENCART . 'catalog/');
 define('DIR_SYSTEM', DIR_OPENCART . 'system/');
@@ -102,34 +97,30 @@ define('DIR_DOWNLOAD', DIR_STORAGE . 'download/');
 define('DIR_LOGS', DIR_STORAGE . 'logs/');
 define('DIR_SESSION', DIR_STORAGE . 'session/');
 define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
-
-// DB
 define('DB_DRIVER', 'mysqli');
-define('DB_HOSTNAME', 'localhost');
-define('DB_USERNAME', '${DB_USER}');
-define('DB_PASSWORD', '${DB_PASS}');
-define('DB_DATABASE', '${DB_NAME}');
-define('DB_PREFIX', '${DB_PREFIX}');
+define('DB_HOSTNAME', '127.0.0.1');
+define('DB_USERNAME', 'DB_USERNAME_PLACEHOLDER');
+define('DB_PASSWORD', 'DB_PASSWORD_PLACEHOLDER');
+define('DB_DATABASE', 'DB_DATABASE_PLACEHOLDER');
+define('DB_PREFIX', 'DB_PREFIX_PLACEHOLDER');
 define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
 define('DB_SSL_CA', '');
+CATCONF
 
-// Cache
-define('CACHE_ENGINE', 'file');
-CONF
+    sed -i "s|HTTP_SERVER_PLACEHOLDER|${HTTP_SERVER}/|g" /var/www/html/config.php
+    sed -i "s|DB_USERNAME_PLACEHOLDER|${DB_USER}|g" /var/www/html/config.php
+    sed -i "s|DB_PASSWORD_PLACEHOLDER|${DB_PASS}|g" /var/www/html/config.php
+    sed -i "s|DB_DATABASE_PLACEHOLDER|${DB_NAME}|g" /var/www/html/config.php
+    sed -i "s|DB_PREFIX_PLACEHOLDER|${DB_PREFIX}|g" /var/www/html/config.php
 
     # Admin config.php
-    cat > /var/www/html/admin/config.php <<CONF
+    cat > /var/www/html/admin/config.php <<'ADMCONF'
 <?php
-// APPLICATION
 define('APPLICATION', 'Admin');
-
-// HTTP
-define('HTTP_SERVER', '${HTTP_SERVER}/admin/');
-define('HTTP_CATALOG', '${HTTP_SERVER}/');
-
-// DIR
+define('HTTP_SERVER', 'HTTP_SERVER_PLACEHOLDER');
+define('HTTP_CATALOG', 'HTTP_CATALOG_PLACEHOLDER');
 define('DIR_OPENCART', '/var/www/html/');
 define('DIR_APPLICATION', DIR_OPENCART . 'admin/');
 define('DIR_SYSTEM', DIR_OPENCART . 'system/');
@@ -145,25 +136,25 @@ define('DIR_DOWNLOAD', DIR_STORAGE . 'download/');
 define('DIR_LOGS', DIR_STORAGE . 'logs/');
 define('DIR_SESSION', DIR_STORAGE . 'session/');
 define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
-
-// DB
 define('DB_DRIVER', 'mysqli');
-define('DB_HOSTNAME', 'localhost');
-define('DB_USERNAME', '${DB_USER}');
-define('DB_PASSWORD', '${DB_PASS}');
-define('DB_DATABASE', '${DB_NAME}');
-define('DB_PREFIX', '${DB_PREFIX}');
+define('DB_HOSTNAME', '127.0.0.1');
+define('DB_USERNAME', 'DB_USERNAME_PLACEHOLDER');
+define('DB_PASSWORD', 'DB_PASSWORD_PLACEHOLDER');
+define('DB_DATABASE', 'DB_DATABASE_PLACEHOLDER');
+define('DB_PREFIX', 'DB_PREFIX_PLACEHOLDER');
 define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
 define('DB_SSL_CA', '');
-
-// Cache
-define('CACHE_ENGINE', 'file');
-
-// OpenCart API
 define('OPENCART_SERVER', 'https://www.opencart.com/');
-CONF
+ADMCONF
+
+    sed -i "s|HTTP_SERVER_PLACEHOLDER|${HTTP_SERVER}/admin/|g" /var/www/html/admin/config.php
+    sed -i "s|HTTP_CATALOG_PLACEHOLDER|${HTTP_SERVER}/|g" /var/www/html/admin/config.php
+    sed -i "s|DB_USERNAME_PLACEHOLDER|${DB_USER}|g" /var/www/html/admin/config.php
+    sed -i "s|DB_PASSWORD_PLACEHOLDER|${DB_PASS}|g" /var/www/html/admin/config.php
+    sed -i "s|DB_DATABASE_PLACEHOLDER|${DB_NAME}|g" /var/www/html/admin/config.php
+    sed -i "s|DB_PREFIX_PLACEHOLDER|${DB_PREFIX}|g" /var/www/html/admin/config.php
 
     chown www-data:www-data /var/www/html/config.php /var/www/html/admin/config.php
 }
@@ -193,7 +184,6 @@ install_opencart() {
 log "=== OpenCart Entry Point ==="
 log "HTTP server: $HTTP_SERVER"
 
-# Start embedded MariaDB
 start_mariadb
 setup_database
 
@@ -209,6 +199,5 @@ fi
 mkdir -p /var/www/html/system/storage/{cache,logs,session,upload,download,modification,sass}
 chown -R www-data:www-data /var/www/html/system/storage
 
-# Keep MariaDB running in background by starting Apache in foreground
 log "Starting Apache..."
 exec "$@"
