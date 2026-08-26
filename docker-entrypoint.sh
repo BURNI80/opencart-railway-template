@@ -10,12 +10,9 @@ log()  { echo -e "${GREEN}[opencart]${NC} $*"; }
 warn() { echo -e "${YELLOW}[opencart]${NC} $*"; }
 err()  { echo -e "${RED}[opencart]${NC} $*" >&2; }
 
-# Support both DB_* (custom) and MYSQL* (Railway managed MySQL) env vars
-DB_HOST="${DB_HOST:-${MYSQLHOST:-mysql}}"
-DB_PORT="${DB_PORT:-${MYSQLPORT:-3306}}"
-DB_USER="${DB_USER:-${MYSQLUSER:-root}}"
-DB_PASS="${DB_PASSWORD:-${MYSQLPASSWORD:-}}"
-DB_NAME="${DB_NAME:-${MYSQLDATABASE:-opencart}}"
+DB_USER="${DB_USER:-opencart}"
+DB_PASS="${DB_PASSWORD:-opencart}"
+DB_NAME="${DB_NAME:-opencart}"
 DB_PREFIX="${DB_PREFIX:-oc_}"
 
 ADMIN_USER="${ADMIN_USERNAME:-admin}"
@@ -28,29 +25,53 @@ else
     HTTP_SERVER="${HTTP_SERVER:-http://localhost:8080}"
 fi
 
-# ─── Helpers ───────────────────────────────────────────────
+# ─── MariaDB (embedded) ───────────────────────────────────
 
-wait_for_db() {
-    log "Waiting for MySQL at ${DB_HOST}:${DB_PORT}..."
-    local retries=60
+start_mariadb() {
+    log "Starting embedded MariaDB..."
+
+    # Initialize data dir if needed
+    if [ ! -d "/var/lib/mysql/mysql" ]; then
+        mysql_install_db --user=mysql --datadir=/var/lib/mysql >/dev/null 2>&1
+    fi
+
+    # Start MariaDB in background
+    mysqld_safe --datadir=/var/lib/mysql &
+
+    # Wait for it
+    local retries=30
     while [ $retries -gt 0 ]; do
-        if mariadb -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" -e "SELECT 1" &>/dev/null; then
-            log "MySQL is ready!"
+        if mysqladmin ping -u root --silent 2>/dev/null; then
+            log "MariaDB is ready!"
             return 0
         fi
         retries=$((retries - 1))
         echo -n "."
         sleep 2
     done
-    err "MySQL not reachable after 120s"
+    err "MariaDB not reachable after 60s"
     return 1
 }
 
+setup_database() {
+    log "Setting up database..."
+
+    # Create database and user
+    mysql -u root <<-EOSQL
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
+FLUSH PRIVILEGES;
+EOSQL
+}
+
+# ─── Helpers ───────────────────────────────────────────────
+
 db_has_tables() {
     local count
-    count=$(mariadb -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
-        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name LIKE '${DB_PREFIX}%'" \
-        -N 2>/dev/null || echo "0")
+    count=$(mysql -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
+        -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name LIKE '${DB_PREFIX}%'" \
+        2>/dev/null || echo "0")
     [ "$count" -gt 0 ]
 }
 
@@ -84,12 +105,12 @@ define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
 
 // DB
 define('DB_DRIVER', 'mysqli');
-define('DB_HOSTNAME', '${DB_HOST}');
+define('DB_HOSTNAME', 'localhost');
 define('DB_USERNAME', '${DB_USER}');
 define('DB_PASSWORD', '${DB_PASS}');
 define('DB_DATABASE', '${DB_NAME}');
 define('DB_PREFIX', '${DB_PREFIX}');
-define('DB_PORT', '${DB_PORT}');
+define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
 define('DB_SSL_CA', '');
@@ -127,12 +148,12 @@ define('DIR_UPLOAD', DIR_STORAGE . 'upload/');
 
 // DB
 define('DB_DRIVER', 'mysqli');
-define('DB_HOSTNAME', '${DB_HOST}');
+define('DB_HOSTNAME', 'localhost');
 define('DB_USERNAME', '${DB_USER}');
 define('DB_PASSWORD', '${DB_PASS}');
 define('DB_DATABASE', '${DB_NAME}');
 define('DB_PREFIX', '${DB_PREFIX}');
-define('DB_PORT', '${DB_PORT}');
+define('DB_PORT', '3306');
 define('DB_SSL_KEY', '');
 define('DB_SSL_CERT', '');
 define('DB_SSL_CA', '');
@@ -156,8 +177,8 @@ install_opencart() {
         --password    "$ADMIN_PASS" \
         --http_server "$HTTP_SERVER/" \
         --db_driver   mysqli \
-        --db_hostname "$DB_HOST" \
-        --db_port     "$DB_PORT" \
+        --db_hostname localhost \
+        --db_port     3306 \
         --db_username "$DB_USER" \
         --db_password "$DB_PASS" \
         --db_database "$DB_NAME" \
@@ -174,7 +195,9 @@ install_opencart() {
 log "=== OpenCart Entry Point ==="
 log "HTTP server: $HTTP_SERVER"
 
-wait_for_db
+# Start embedded MariaDB
+start_mariadb
+setup_database
 
 if db_has_tables; then
     log "Database already populated — generating config.php..."
@@ -188,5 +211,6 @@ fi
 mkdir -p /var/www/html/system/storage/{cache,logs,session,upload,download,modification,sass}
 chown -R www-data:www-data /var/www/html/system/storage
 
+# Keep MariaDB running in background by starting Apache in foreground
 log "Starting Apache..."
 exec "$@"
