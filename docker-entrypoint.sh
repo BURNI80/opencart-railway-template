@@ -10,12 +10,12 @@ log()  { echo -e "${GREEN}[opencart]${NC} $*"; }
 warn() { echo -e "${YELLOW}[opencart]${NC} $*"; }
 err()  { echo -e "${RED}[opencart]${NC} $*" >&2; }
 
-# Railway provides MYSQLHOST, MYSQLPORT, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE
-DB_HOST="${MYSQLHOST:-mysql}"
-DB_PORT="${MYSQLPORT:-3306}"
-DB_USER="${MYSQLUSER:-root}"
-DB_PASS="${MYSQLPASSWORD:-}"
-DB_NAME="${MYSQLDATABASE:-opencart}"
+# Support both DB_* (custom) and MYSQL* (Railway managed MySQL) env vars
+DB_HOST="${DB_HOST:-${MYSQLHOST:-mysql}}"
+DB_PORT="${DB_PORT:-${MYSQLPORT:-3306}}"
+DB_USER="${DB_USER:-${MYSQLUSER:-root}}"
+DB_PASS="${DB_PASSWORD:-${MYSQLPASSWORD:-}}"
+DB_NAME="${DB_NAME:-${MYSQLDATABASE:-opencart}}"
 DB_PREFIX="${DB_PREFIX:-oc_}"
 
 ADMIN_USER="${ADMIN_USERNAME:-admin}"
