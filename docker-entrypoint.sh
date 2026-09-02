@@ -120,5 +120,14 @@ a2dismod mpm_worker 2>/dev/null || true
 rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true
 
+# Railway injects a $PORT variable and routes the public domain to it.
+# Apache must listen on that port (fall back to 80 for local docker compose).
+LISTEN_PORT="${PORT:-80}"
+log "Configuring Apache to listen on port ${LISTEN_PORT}..."
+echo "Listen ${LISTEN_PORT}" > /etc/apache2/ports.conf
+sed -i "s/\*:80/*:${LISTEN_PORT}/g" /etc/apache2/sites-available/000-default.conf 2>/dev/null || true
+echo "ServerName localhost" > /etc/apache2/conf-enabled/servername.conf 2>/dev/null || true
+echo "ServerName localhost" > /etc/apache2/conf-available/servername.conf 2>/dev/null || true
+
 log "Starting Apache..."
 exec "$@"
