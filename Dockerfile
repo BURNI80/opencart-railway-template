@@ -5,8 +5,9 @@ RUN apt-get update && apt-get install -y \
     mariadb-server mariadb-client \
     && docker-php-ext-install pdo_mysql bcmath zip gd mysqli mbstring \
     && a2enmod rewrite headers \
-    && a2dismod mpm_event 2>/dev/null || true \
-    && rm -f /etc/apache2/mods-available/mpm_event.load 2>/dev/null || true \
+    && a2dismod mpm_event mpm_worker mpm_prefork 2>/dev/null || true \
+    && rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* /etc/apache2/mods-enabled/mpm_prefork.* 2>/dev/null || true \
+    && a2enmod mpm_prefork \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html

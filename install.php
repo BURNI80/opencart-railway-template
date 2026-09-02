@@ -51,12 +51,28 @@ try {
     die("[FAIL] Connection: " . $e->getMessage() . "\n");
 }
 
-// Check if already installed
-$stmt = $pdo->query("SHOW TABLES LIKE '{$db_prefix}setting'");
-if ($stmt->fetch()) {
-    echo "[SKIP] Tables already exist\n";
+// Check if already fully installed (a valid admin user exists).
+// If the tables exist but no usable data (e.g. an interrupted previous run),
+// we wipe and reinstall from scratch so the DB is always consistent.
+$installed = false;
+try {
+    $cnt = $pdo->query("SELECT COUNT(*) AS c FROM `{$db_prefix}user`")->fetch()['c'];
+    $installed = (int)$cnt > 0;
+} catch (Throwable $e) {
+    $installed = false;
+}
+
+if ($installed) {
+    echo "[SKIP] OpenCart already fully installed\n";
 } else {
     echo "[INFO] Creating database tables from oc_db_schema()...\n";
+
+    // Clean any partial tables first so we start from an empty, valid schema.
+    $stmt = $pdo->query("SHOW TABLES LIKE '{$db_prefix}%'");
+    $existing = $stmt->fetchAll(PDO::FETCH_NUM);
+    foreach ($existing as $row) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$row[0]}`");
+    }
 
     $tables = oc_db_schema();
     $created = 0;
