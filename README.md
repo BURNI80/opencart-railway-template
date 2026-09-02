@@ -1,23 +1,30 @@
 # OpenCart — Railway Template
 
-Dashboard de [OpenCart 4.1.0.4](https://github.com/opencart/opencart) listo para desplegar en **Railway** con configuración 100% automática. Tienda y panel de administración funcionando en minutos, sin necesidad de tocar variables de entorno ni hacer setup manual.
+Dashboard de [OpenCart 4.1.0.4](https://github.com/opencart/opencart) listo para desplegar en **Railway** con un clic. Tienda y panel de administración funcionando en minutos.
 
 > **Pensado para la capa gratuita de Railway.** Un único contenedor (Apache + PHP + MariaDB embebido) con volumen para datos persistentes. Sin servicios extra que sumen costes.
 
 ---
 
-## Credenciales por defecto (importante)
+## Deploy en Railway
 
-| Campo | Valor |
-|-------|-------|
-| **URL tienda** | la que te asigne Railway (algo como `https://tu-tienda.up.railway.app`) |
-| **URL admin** | `https://tu-tienda.up.railway.app/admin/` |
-| **Usuario admin** | `admin` |
-| **Contraseña admin** | `opencart` |
-| **Email admin** | `admin@example.com` |
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/IvqCee?utm_campaign=opencart)
 
-> ⚠️ **Cambia la contraseña del admin justo después del primer login.**
-> Panel de administración → *System → Users → Users*, edita el usuario `admin`.
+Al desplegar, el formulario de Railway te pide **las credenciales del admin** (usuario, contraseña y email). Pones las tuyas y listo — no hay credenciales por defecto hardcodeadas.
+
+---
+
+## Credenciales (las pones tú al desplegar)
+
+| Campo | Qué es |
+|-------|--------|
+| **Usuario admin** | Usuario del panel de administración (p. ej. `admin`) |
+| **Contraseña admin** | La contraseña que elijas (mín. 5 caracteres) |
+| **Email admin** | Email del administrador |
+
+> ⚠️ Tras el deploy, entra en `/admin/` con esas credenciales. Puedes cambiarlas después en *System → Users → Users*.
+> - **URL tienda:** la que te asigne Railway (algo como `https://tu-tienda.up.railway.app`)
+> - **URL admin:** `https://tu-tienda.up.railway.app/admin/`
 
 ---
 
@@ -41,17 +48,17 @@ En el arranque, un instalador automático (PHP) detecta si la base de datos ya e
 
 ## Cómo desplegar (Railway)
 
-1. **Deploy template** con un clic desde Railway (conecta tu repo con este código).
-2. Railway construye la imagen y monta el volumen en `/var/lib/mysql`.
-3. Espera 2–4 minutos a que el primer deploy termine (healthcheck verifica que la tienda responde).
-4. Abre tu URL y verás la tienda. Entra en `/admin/` con las credenciales de arriba.
+1. Pulsa el botón **Deploy on Railway** de arriba (o abre `https://railway.com/new/template/IvqCee`).
+2. En el formulario, introduce tus **credenciales de admin** (usuario, contraseña y email).
+3. Railway construye la imagen y monta el volumen en `/var/lib/mysql` (persistencia).
+4. Espera 2–4 minutos a que el primer deploy termine (healthcheck verifica que la tienda responde).
+5. Abre tu URL y verás la tienda. Entra en `/admin/` con las credenciales que pusiste.
 
 ### Configuración recomendada tras el despliegue
-1. **Cambia la contraseña del admin** (System → Users → Users).
-2. **Configura tu tienda**: System → Settings (nombre, email, divisa, etc.).
-3. **Añade productos**: Catalog → Products.
-4. **Activa pagos y envíos**: Extensions → Extensions.
-5. *(Opcional)* Activa las **SEO URLs**: System → Settings → Server → Enable SEO URLs. Las reglas de reescritura ya vienen incluidas en el Apache.
+1. **Configura tu tienda**: System → Settings (nombre, email, divisa, etc.).
+2. **Añade productos**: Catalog → Products.
+3. **Activa pagos y envíos**: Extensions → Extensions.
+4. *(Opcional)* Activa las **SEO URLs**: System → Settings → Server → Enable SEO URLs. Las reglas de reescritura ya vienen incluidas en el Apache.
 
 ---
 
