@@ -112,5 +112,13 @@ php "$INSTALLER" \
 mkdir -p /var/www/html/system/storage/{cache,logs,session,upload,download,modification,sass}
 chown -R www-data:www-data /var/www/html/system/storage
 
+# Enforce a single MPM (prefork) at runtime. PHP needs prefork and Apache
+# aborts with "More than one MPM loaded" if any other MPM stays enabled.
+log "Enforcing Apache MPM: prefork..."
+a2dismod mpm_event 2>/dev/null || true
+a2dismod mpm_worker 2>/dev/null || true
+rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true
+a2enmod mpm_prefork 2>/dev/null || true
+
 log "Starting Apache..."
 exec "$@"
