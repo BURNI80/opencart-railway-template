@@ -1,106 +1,177 @@
 # OpenCart — Railway Template
 
-Deploy [OpenCart 4.1.0.4](https://github.com/opencart/opencart) on Railway with a fully automated setup. Storefront and admin panel ready in minutes.
+Dashboard de [OpenCart 4.1.0.4](https://github.com/opencart/opencart) listo para desplegar en **Railway** con configuración 100% automática. Tienda y panel de administración funcionando en minutos, sin necesidad de tocar variables de entorno ni hacer setup manual.
 
-## What's Included
+> **Pensado para la capa gratuita de Railway.** Un único contenedor (Apache + PHP + MariaDB embebido) con volumen para datos persistentes. Sin servicios extra que sumen costes.
 
-| Service | Image / Source | Purpose |
-|---------|---------------|---------|
-| **OpenCart** | `php:8.1-apache` + OpenCart 4.1.0.4 | E-commerce storefront & admin |
-| **MySQL** | `mariadb:10.6` (Railway managed) | Database |
+---
 
-## Estimated Cost
+## Credenciales por defecto (importante)
 
-On Railway's Hobby plan ($5/mes credit included), a small store runs ~$3–5/month. Actual cost depends on traffic and database size.
+| Campo | Valor |
+|-------|-------|
+| **URL tienda** | la que te asigne Railway (algo como `https://tu-tienda.up.railway.app`) |
+| **URL admin** | `https://tu-tienda.up.railway.app/admin/` |
+| **Usuario admin** | `admin` |
+| **Contraseña admin** | `opencart` |
+| **Email admin** | `admin@example.com` |
 
-## Quick Deploy
+> ⚠️ **Cambia la contraseña del admin justo después del primer login.**
+> Panel de administración → *System → Users → Users*, edita el usuario `admin`.
 
-1. Click **Deploy Template** above
-2. Railway creates both services and links them automatically
-3. Wait ~3–5 minutes for the first deploy
-4. Visit your store URL
+---
 
-## Post-Deploy Steps
+## Qué incluye
 
-1. **Access admin panel** at `https://<your-url>/admin/`
-2. **Login** with the credentials you set (defaults: `admin` / `opencart`)
-3. **Change admin password** immediately
-4. **Configure your store**: System → Settings (store name, URL, email, etc.)
-5. **Add products**: Catalog → Products
-6. **Set up payment & shipping**: Extensions → Extensions
+Un solo servicio con todo dentro (arquitectura *todo-en-uno* para mínimos costes):
 
-## Environment Variables
+| Componente | Detalle |
+|------------|---------|
+| **Web server** | Apache 2.4 (mod_rewrite + headers), MPM prefork |
+| **PHP** | 8.1 (extensión `gd` con JPEG/FreeType, `mysqli`, `mbstring`, `zip`, `bcmath`, `pdo_mysql`) |
+| **Base de datos** | **MariaDB embebido** (arranca dentro del mismo contenedor, `127.0.0.1:3306`) |
+| **OpenCart** | 4.1.0.4 (tienda + panel admin) |
+| **Datos persistentes** | Volumen montado en `/var/lib/mysql` (la base de datos sobrevive a los redeploys) |
 
-### Auto-provided by Railway (from linked MySQL service)
+En el arranque, un instalador automático (PHP) detecta si la base de datos ya está instalada:
+- **Primer deploy:** crea las 159 tablas del esquema, importa los datos de ejemplo y crea el usuario admin.
+- **Deploys posteriores:** si el admin ya existe, **no reinstala** — solo regenera los `config.php` a partir de las variables de entorno y sigue.
 
-| Variable | Description |
-|----------|-------------|
-| `MYSQLHOST` | Database hostname |
-| `MYSQLPORT` | Database port (`3306`) |
-| `MYSQLUSER` | Database username |
-| `MYSQLPASSWORD` | Database password |
-| `MYSQLDATABASE` | Database name (`opencart`) |
+---
 
-### User-configurable
+## Cómo desplegar (Railway)
 
-| Variable | Description | Default |
+1. **Deploy template** con un clic desde Railway (conecta tu repo con este código).
+2. Railway construye la imagen y monta el volumen en `/var/lib/mysql`.
+3. Espera 2–4 minutos a que el primer deploy termine (healthcheck verifica que la tienda responde).
+4. Abre tu URL y verás la tienda. Entra en `/admin/` con las credenciales de arriba.
+
+### Configuración recomendada tras el despliegue
+1. **Cambia la contraseña del admin** (System → Users → Users).
+2. **Configura tu tienda**: System → Settings (nombre, email, divisa, etc.).
+3. **Añade productos**: Catalog → Products.
+4. **Activa pagos y envíos**: Extensions → Extensions.
+5. *(Opcional)* Activa las **SEO URLs**: System → Settings → Server → Enable SEO URLs. Las reglas de reescritura ya vienen incluidas en el Apache.
+
+---
+
+## Coste estimado
+
+- **Capa gratuita / plan con crédito:** este despliegue usa **1 servicio + 1 volumen**, por lo que cabe holgado en el crédito mensual gratuito de un plan Hobby/desarrollo. Ideal para tiendas pequeñas o de prueba.
+- El volumen de datos y el servicio activo consumen lo mínimo posible al usar un único contenedor.
+
+Coste real según tráfico y tamaño de la base de datos — con una tienda pequeña estarás dentro de la cuota gratuita.
+
+---
+
+## Variables de entorno
+
+La template funciona **sin configurar nada** (todos los valores tienen un defecto sensato). Puedes sobreescribirlos si quieres.
+
+| Variable | Descripción | Default |
 |----------|-------------|---------|
-| `ADMIN_USERNAME` | Admin panel username | `admin` |
-| `ADMIN_PASSWORD` | Admin panel password | `opencart` |
-| `ADMIN_EMAIL` | Admin email address | `admin@example.com` |
-| `DB_PREFIX` | Database table prefix | `oc_` |
+| `ADMIN_USERNAME` | Usuario del panel admin | `admin` |
+| `ADMIN_PASSWORD` | Contraseña del admin | `opencart` |
+| `ADMIN_EMAIL` | Email del admin | `admin@example.com` |
+| `DB_PREFIX` | Prefijo de tablas de la BD | `oc_` |
+| `HTTP_SERVER` | URL pública de la tienda (la pone Railway automáticamente con `RAILWAY_PUBLIC_DOMAIN`) | autodetectada |
+| `MYSQLHOST` | Host de una BD externa (opcional, ver abajo) | embebida |
+| `MYSQLPORT` | Puerto de la BD | `3306` |
+| `MYSQLUSER` | Usuario de la BD | `opencart` |
+| `MYSQLPASSWORD` | Contraseña de la BD | `opencart` |
+| `MYSQLDATABASE` | Nombre de la BD | `opencart` |
 
-## Local Development
+### ¿Quieres usar una base de datos externa en vez de la embebida?
+La template usa **MariaDB embebido** por defecto (cero configuración). Si ya tienes un servicio MySQL/MariaDB en Railway, solo tienes que definir `MYSQLHOST` (ej. `mysql.railway.internal`) y la template conectará con **esa** base en lugar de levantar la embebida. El resto de variables `MYSQL*` se usan para la conexión.
+
+---
+
+## Desarrollo local (Docker Compose)
 
 ```bash
-git clone https://github.com/your-user/opencart-railway-template.git
+git clone https://github.com/BURNI80/opencart-railway-template.git
 cd opencart-railway-template
-docker compose up -d
+docker compose up -d --build
 ```
 
-- Storefront: http://localhost:8080
-- Admin panel: http://localhost:8080/admin/
+- **Tienda:** http://localhost:8080
+- **Admin:** http://localhost:8080/admin/ (`admin` / `opencart`)
 
+Para resetear todos los datos:
 ```bash
-docker compose down -v   # stop and remove all data
+docker compose down -v
 ```
 
-## Architecture
+> Nota: en local usamos un MariaDB **separado** (servicio `mysql` de compose) para un flujo más cómodo. Los datos de BD se guardan en el volumen `mysql_data`, y el storage de OpenCart se guarda en volúmenes para `cache`, `logs`, `session`, `upload`, `download`, `modification` y `sass` (sin tapar `vendor`).
+
+---
+
+## Arquitectura
 
 ```
-┌─────────────────┐     ┌─────────────────┐
-│    OpenCart      │────▶│     MySQL       │
-│  php:8.1-apache  │     │  mariadb:10.6   │
-│  port 80         │     │  port 3306      │
-└─────────────────┘     └─────────────────┘
-        │
-        ▼
-  /var/www/html/system/storage  (volume — persists uploads, logs, cache)
+┌───────────────────────────────────────────┐
+│          Contenedor OpenCart              │
+│  ┌─────────────┐    ┌──────────────────┐  │
+│  │  Apache 2.4  │◀──▶│   PHP 8.1        │  │
+│  │  (prefork)   │    │  (gd, mysqli...) │  │
+│  └─────────────┘    └──────────────────┘  │
+│        └──────────────┬───────────────────┘
+│                    OpenCart 4            │
+│  ┌─────────────────────┐                 │
+│  │  MariaDB embebido   │ 127.0.0.1:3306  │
+│  └─────────────────────┘                 │
+└───────────┬───────────────────────────────┘
+            │
+            ▼
+   Volumen: /var/lib/mysql   ← datos de la BD (persistentes)
 ```
 
-- **First deploy**: CLI installer runs, creates DB schema, generates config files
-- **Subsequent deploys**: Detects existing DB, regenerates config from env vars
-- **Private networking**: OpenCart connects to MySQL via `mysql.railway.internal`
+- **Apache escucha en `$PORT`** (Railway lo inyecta automáticamente) y el dominio público apunta a ese puerto.
+- **`DIR_STORAGE = /var/www/html/system/storage/`** — IMPORTANTE: esta carpeta incluye el `vendor/` de Composer con el que OpenCart renderiza las plantillas (Twig). **No muevas storage fuera del document root**: rompería la tienda con `Class "Twig\Loader\FilesystemLoader" not found`.
+- El entrypoint hace escribibles `/var/www` y el storage (owner `www-data`, permisos `775`) para que el panel admin no muestre el aviso de seguridad *"the folder /var/www/ need to be writable"*.
 
-## Troubleshooting
+### Persistencia y el aviso de seguridad
+- Los datos de la tienda (productos, pedidos, clientes, config) están en MariaDB → **volumen `/var/lib/mysql`**. Sobreviven a cada redeploy.
+- El storage de OpenCart (`system/storage/`) vive dentro del contenedor y se regenera en cada arranque. Si necesitas persistir subidas/caché entre deploys, monta volúmenes en los subdirectorios concretos (no sobre `system/storage` completo).
+
+---
+
+## Solución de problemas
+
+### El admin muestra el aviso "Warning: the folder /var/www/ need to be writable"
+Es un **aviso de seguridad** de OpenCart, no un error. Esta template lo evita haciendo `/var/www` escribible (owner `www-data`, `chmod 775`) durante el arranque. No hagas caso a la recomendación de *mover* la carpeta storage fuera del document root: el `vendor/` de Composer vive dentro de `system/storage/vendor` y moverlo rompe la tienda.
+
+### "Error: Class Twig\Loader\FilesystemLoader not found"
+Sucede si `DIR_STORAGE` deja de apuntar a `system/storage/` (donde está `vendor/`). La template lo configura correctamente; no forces el storage a otra ruta.
 
 ### "Database Connection Failed"
-- Ensure the MySQL service is linked in your Railway project
-- Check the MySQL service is running in the Railway dashboard
-- Wait 1–2 minutes for the database to fully initialize
-
-### "Installation Incomplete" / Installer page showing
-- The CLI installer may have failed. Check deploy logs
-- Ensure `ADMIN_PASSWORD` is between 5–20 characters
+- Solo pasa si configuraste `MYSQLHOST` externo y la conexión falló. Revisa host/puerto/usuario/contraseña.
+- Con la BD embebida (por defecto) no debería ocurrir.
 
 ### 500 Internal Server Error
-- Check Railway deploy logs for the specific PHP error
-- Verify all env vars are set correctly
+- Revisa los logs del deploy en el panel de Railway para ver el error PHP concreto.
+- Comprueba que las variables de entorno no tengan valores rotos.
 
-### SEO URLs not working
-- `.htaccess` rewrite rules are included in the Apache config
-- Clear OpenCart cache: admin → Dashboard → clear icon
+### SEO URLs / enlaces que dan 404
+- Las reglas de reescritura de Apache ya están incluidas (`apache-opencart.conf`).
+- Activa "SEO URLs" en System → Settings → Server y limpia la caché (icono de limpiar en el dashboard).
 
-## License
+---
 
-GPL v2 — same as [OpenCart](https://github.com/opencart/opencart/blob/master/LICENSE.md).
+## Estructura del proyecto
+
+```
+├── Dockerfile              # Imagen PHP 8.1-Apache + MariaDB embebido
+├── docker-entrypoint.sh    # Arranca BD, instala OpenCart, configura Apache
+├── install.php             # Instalador idempotente (esquema + datos + admin)
+├── apache-opencart.conf    # VirtualHost con reglas de reescritura (SEO)
+├── docker-compose.yml      # Para desarrollo local
+├── .env.example            # Variables de entorno de referencia
+└── README.md               # Esta documentación
+```
+
+---
+
+## Licencia
+
+GPL v2 — igual que [OpenCart](https://github.com/opencart/opencart/blob/master/LICENSE.md).

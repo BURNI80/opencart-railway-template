@@ -9,8 +9,18 @@ services:
       - mysql
     ports:
       - "8080:80"
+    # IMPORTANT: mount only the writable storage subfolders. Do NOT mount the
+    # whole system/storage folder — it contains the committed Composer vendor
+    # (system/storage/vendor) that OpenCart needs to render (Twig). Covering it
+    # with an empty volume breaks the storefront.
     volumes:
-      - opencart_storage:/var/www/html/system/storage
+      - opencart_storage_cache:/var/www/html/system/storage/cache
+      - opencart_storage_logs:/var/www/html/system/storage/logs
+      - opencart_storage_session:/var/www/html/system/storage/session
+      - opencart_storage_upload:/var/www/html/system/storage/upload
+      - opencart_storage_download:/var/www/html/system/storage/download
+      - opencart_storage_modification:/var/www/html/system/storage/modification
+      - opencart_storage_sass:/var/www/html/system/storage/sass
     environment:
       - MYSQLHOST=mysql
       - MYSQLPORT=3306
@@ -37,7 +47,13 @@ services:
       - opencart-net
 
 volumes:
-  opencart_storage:
+  opencart_storage_cache:
+  opencart_storage_logs:
+  opencart_storage_session:
+  opencart_storage_upload:
+  opencart_storage_download:
+  opencart_storage_modification:
+  opencart_storage_sass:
   mysql_data:
 
 networks:
