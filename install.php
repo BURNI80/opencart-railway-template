@@ -199,7 +199,9 @@ if ($installed) {
 
 // Write config.php files
 $dir_opencart = '/var/www/html/';
-$dir_storage  = $dir_opencart . 'system/storage/';
+// Storage lives OUTSIDE the document root for security and to silence the
+// "folder need to be writable / move storage" warning in the OpenCart admin.
+$dir_storage  = '/var/www/storage/';
 
 // Catalog config.php
 $catalog = "<?php\n"
@@ -210,7 +212,7 @@ $catalog = "<?php\n"
     . "define('DIR_SYSTEM', DIR_OPENCART . 'system/');\n"
     . "define('DIR_EXTENSION', DIR_OPENCART . 'extension/');\n"
     . "define('DIR_IMAGE', DIR_OPENCART . 'image/');\n"
-    . "define('DIR_STORAGE', DIR_SYSTEM . 'storage/');\n"
+    . "define('DIR_STORAGE', '" . $dir_storage . "');\n"
     . "define('DIR_LANGUAGE', DIR_APPLICATION . 'language/');\n"
     . "define('DIR_TEMPLATE', DIR_APPLICATION . 'view/template/');\n"
     . "define('DIR_CONFIG', DIR_SYSTEM . 'config/');\n"
@@ -243,7 +245,7 @@ $admin = "<?php\n"
     . "define('DIR_SYSTEM', DIR_OPENCART . 'system/');\n"
     . "define('DIR_EXTENSION', DIR_OPENCART . 'extension/');\n"
     . "define('DIR_IMAGE', DIR_OPENCART . 'image/');\n"
-    . "define('DIR_STORAGE', DIR_SYSTEM . 'storage/');\n"
+    . "define('DIR_STORAGE', '" . $dir_storage . "');\n"
     . "define('DIR_CATALOG', DIR_OPENCART . 'catalog/');\n"
     . "define('DIR_LANGUAGE', DIR_APPLICATION . 'language/');\n"
     . "define('DIR_TEMPLATE', DIR_APPLICATION . 'view/template/');\n"
