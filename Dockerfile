@@ -1,8 +1,9 @@
 FROM php:8.1-apache
 
 RUN apt-get update && apt-get install -y \
-    git curl libpng-dev libonig-dev libxml2-dev libzip-dev unzip \
+    git curl libpng-dev libjpeg-dev libwebp-dev libfreetype6-dev libonig-dev libxml2-dev libzip-dev unzip \
     mariadb-server mariadb-client \
+    && docker-php-ext-configure gd --with-jpeg --with-freetype \
     && docker-php-ext-install pdo_mysql bcmath zip gd mysqli mbstring \
     && a2enmod rewrite headers \
     && a2dismod mpm_event mpm_worker mpm_prefork 2>/dev/null || true \
