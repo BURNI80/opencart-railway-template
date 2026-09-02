@@ -108,12 +108,14 @@ php "$INSTALLER" \
     --db_prefix="$DB_PREFIX" \
     --language=en-gb
 
-# Ensure the storage dir exists OUTSIDE the document root (/var/www/storage),
-# fully writable by the web server. This also silences the OpenCart admin
-# "folder need to be writable" security warning.
-mkdir -p /var/www/storage/{cache,logs,session,upload,download,modification,sass}
+# Ensure OpenCart storage dirs exist and are writable by the web server.
+# Storage stays under system/storage so OpenCart finds its Composer vendor
+# (system/storage/vendor), which is loaded from DIR_STORAGE. We also make
+# /var/www writable to silence OpenCart's admin "folder need to be writable"
+# security warning (which checks the install root for the storage move).
+mkdir -p /var/www/html/system/storage/{cache,logs,session,upload,download,modification,sass}
 chown -R www-data:www-data /var/www/
-chmod -R 775 /var/www/storage /var/www/html
+chmod -R 775 /var/www/html /var/www/html/system/storage
 
 # Enforce a single MPM (prefork) at runtime. PHP needs prefork and Apache
 # aborts with "More than one MPM loaded" if any other MPM stays enabled.
