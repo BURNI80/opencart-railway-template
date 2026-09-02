@@ -204,7 +204,7 @@ $catalog = "<?php\n"
     . "define('DIR_SESSION', DIR_STORAGE . 'session/');\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
     . "define('DB_DRIVER', 'mysqli');\n"
-    . "define('DB_HOSTNAME', '127.0.0.1');\n"
+    . "define('DB_HOSTNAME', '" . addslashes($db_host) . "');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"
@@ -216,7 +216,6 @@ $catalog = "<?php\n"
     . "define('CACHE_ENGINE', 'file');\n";
 
 file_put_contents('/var/www/html/config.php', $catalog);
-echo "[OK] Wrote config.php (catalog)\n";
 
 // Admin config.php
 $admin = "<?php\n"
@@ -239,7 +238,7 @@ $admin = "<?php\n"
     . "define('DIR_SESSION', DIR_STORAGE . 'session/');\n"
     . "define('DIR_UPLOAD', DIR_STORAGE . 'upload/');\n\n"
     . "define('DB_DRIVER', 'mysqli');\n"
-    . "define('DB_HOSTNAME', '127.0.0.1');\n"
+    . "define('DB_HOSTNAME', '" . addslashes($db_host) . "');\n"
     . "define('DB_USERNAME', '" . addslashes($db_user) . "');\n"
     . "define('DB_PASSWORD', '" . addslashes($db_pass) . "');\n"
     . "define('DB_DATABASE', '" . addslashes($db_name) . "');\n"
